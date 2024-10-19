@@ -1,4 +1,5 @@
 from amplpy import AMPL
+import xarray as xr
 from matplotlib import pyplot as plt
 import math
 # Initialize AMPL instance
@@ -7,9 +8,10 @@ ampl = AMPL()
 # Params
 N = 1
 N = 2
-N = 7
+N = 5
+N = 8
 N = 9
-# N = 20
+N = 10
 mi = 250000  # initial mass
 md = 150000
 tf_min = 0.4*3*2.26*10**6  # min thrust (newton)
@@ -19,7 +21,7 @@ th_max = math.radians(120)  # max thrust gimbal angle
 L = 50.3  # length of body
 M = 10**9  # big number go brrr
 c = 1 / (3700)  # mass flow rate per newton
-d = 110  # drag coefficient
+d = 200  # drag coefficient
 # catch bounds
 pos = 0.5
 angle = math.radians(10)
@@ -32,15 +34,15 @@ Qth = 1000**2
 Qxd = 1
 Qyd = 1
 Qthd = 100**2
-Rtfa = 0.1*0.0002**2
+Rtfa = 0.5*0.0002**2
 Qm = -0.006**2
-QTR = 1500**2
+QTR = 10*1500**2
 QLB = 1500**2
 # Initial conditions
-x0 = 0
-y0 = 800
+x0 = 250
+y0 = 2000
 xd0 = 0
-yd0 = -150
+yd0 = -200
 th0 = 0 # math.radians(90) TODO
 thd0 = 0
 
@@ -90,7 +92,6 @@ ampl.eval('''
     var th {T} >= -th_max, <= th_max;
     var xd {T};
     var yd {T};
-    var ydc {T};
     var thd {T};
     var tf {T} >= tf_min, <= tf_max;
     var phi {T} >= -phi_max, <= phi_max;
@@ -103,38 +104,24 @@ ampl.eval('''
         Qx * sum {t in T} dt[t]*x[t]^2
       + Qy * sum {t in T} dt[t]*y[t]^2
       + Qth * sum {t in T} dt[t]*th[t]^2
-      + Qxd * sum {t in T} dt[t]*xd[t]^2
-      + Qyd * sum {t in T} dt[t]*yd[t]^2
-      + Qthd * sum {t in T} dt[t]*thd[t]^2
-      # + Qm * sum {t in T} dt[t]*m[t]^2
+      # + Qxd * sum {t in T} dt[t]*xd[t]^2
+      # + Qyd * sum {t in T} dt[t]*yd[t]^2
+      # + Qthd * sum {t in T} dt[t]*thd[t]^2
       + QTR * sum {t in T} dt[t]*TR[t]^2
+      # - Rtfa * sum {t in T} dt[t]*tfa[t]^2
       # + QLB * sum {t in T} dt[t]*LB[t]^2
-      + Rtfa * sum {t in T} dt[t]*LB[t]*tfa[t]^2;
+      + Qm * sum {t in T} dt[t]*m[t]^2;
 ''')
 ampl.eval('''
     # Constraints
     subject to thrust_constraint {t in T}:
         tfa[t] = tf[t] * LB[t] * TR[t];
-    # subject to thrust_lb_constraint {t in T}:
-    #     tfa[t] <= M * LB[t];
-    # subject to thrust_tr_constraint {t in T}:
-    #     tfa[t] <= M * TR[t];
     subject to position_catch_constraint {t in T}:
         x[t]^2 + y[t]^2 + th[t]^2 + xd[t]^2 + yd[t]^2 + thd[t]^2 <= 1 + M * TR[t];
-    # subject to position_catch_constraint {t in T}:
-    #     x[t]^2 + y[t]^2 <= pos^2 + M * TR[t];
-    # subject to angle_catch_constraint {t in T}:
-    #     th[t]^2 <= angle^2 + M * TR[t];
-    # subject to velocity_catch_constraint {t in T}:
-    #     xd[t]^2 + yd[t]^2 <= vel^2 + M * TR[t];
-    # subject to rate_catch_constraint {t in T}:
-    #     thd[t]^2 <= rate^2 + M * TR[t];
     subject to landing_shutoff_constraint {t in 1..N-1}:
         LB[t + 1] >= LB[t];
-    # subject to caught_constraint {t in 1..N-1}:
-    #     TR[t + 1] <= TR[t];
     subject to mass_model_constraint {t in 1..N-1}:
-        m[t + 1] = m[t];# - c*dt[t]*tfa[t];
+        m[t + 1] = m[t] - c*dt[t]*tfa[t];
     subject to xpos_model_constraint {t in 1..N-1}:
         x[t + 1] = TR[t]*(x[t] + dt[t]*xd[t]);
     subject to ypos_model_constraint {t in 1..N-1}:
@@ -143,10 +130,6 @@ ampl.eval('''
         th[t + 1] = TR[t]*(th[t] + dt[t]*thd[t]);
     subject to xvel_model_constraint {t in 1..N-1}:
         xd[t + 1] = TR[t]*(xd[t] + dt[t]*sin(th[t]+phi[t])*tfa[t]/m[t]);
-    # subject to yvel_model_constraint {t in 1..N-1}:
-    #     yd[t + 1] = TR[t]*(yd[t] + dt[t]*(cos(th[t]+phi[t])*tfa[t]/m[t] - 9.8 - d*yd[t]^2/m[t]));
-    subject to vd_clone_constraint {t in 1..N}:
-        ydc[t] >= yd[t];
     subject to yvel_model_constraint {t in 1..N-1}:
         yd[t + 1] = TR[t]*(yd[t] + dt[t]*(cos(th[t]+phi[t])*tfa[t]/m[t] - 9.8 + d*yd[t]^2/m[t]));
     subject to rate_model_constraint {t in 1..N-1}:
@@ -253,9 +236,16 @@ def display():
 
 
 def plot():
-    xp = list(map(lambda ans: ans[1], x))
-    yp = list(map(lambda ans: ans[1], y))
-    plt.plot(xp, yp)
+    xp = [val[1] for val in x]
+    yp = [val[1] for val in y]
+    LBp = [val[1] for val in LB]
+    TRp = [val[1] for val in TR]
+    da = xr.DataArray(yp, dims=('x',), coords={'x': xp, 'LB': ('x', LBp), 'TR': ('x', TRp)})
+    fig, ax = plt.subplots()
+    da.plot(ax=ax, color='blue', linewidth=3)
+    da.where(da.LB == 1).plot(ax=ax, color='red', linewidth=3)
+    da.where(da.TR == 0).plot(ax=ax, color='green', linewidth=3)
+    ax.set_aspect('equal')
     plt.show()
 
 
