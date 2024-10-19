@@ -19,11 +19,6 @@ L = 50.3  # length of body
 M = 10**9  # big number go brrr
 c = 1 / (3700)  # mass flow rate per newton
 d = 200  # drag coefficient
-# catch bounds
-pos = 0.5
-angle = math.radians(10)
-vel = 0.5
-rate = math.radians(10)
 # Tuning variables
 Qx = 5
 Qy = 1
@@ -37,6 +32,7 @@ QTR = 1000*1500**2
 QLB = 10*1500**2
 # Rate decay const
 dt0 = 3
+# dt_decay = 0.05
 dt_decay = 0.0
 
 
@@ -135,6 +131,14 @@ class ProblemState:
         self.m = [val[1] for val in m]
         self.tfa = [val[1] for val in tfa]
 
+    def print_action(self):
+        print(f"t={self.t0}\n")
+        print(f"\tx, y, th: {self.x[0]}, {self.y[0]}, {self.th[0]}")
+        print(f"\txd, yd, thd: {self.xd[0]}, {self.yd[0]}, {self.thd[0]}")
+        print(f"\tTR, LB, m: {self.TR[0]}, {self.LB[0]}, {self.m[0]}")
+        print(f"\ttf, tfa, phi: {self.tf[0]}, {self.tfa[0]}, {self.phi [0]}")
+        print()
+
     def __str__(self):
         string = []
         time = self.t0
@@ -198,10 +202,6 @@ ampl.eval('''
     param Qm;
     param QTR;
     param QLB;
-    param pos;
-    param angle;
-    param vel;
-    param rate;
     param x0;
     param y0;
     param th0;
@@ -230,15 +230,15 @@ ampl.eval('''
 
     # Objective function
     minimize obj:
-        Qx * sum {t in T} dt[t]*x[t]^2
-      + Qy * sum {t in T} dt[t]*y[t]^2
-      + Qth * sum {t in T} dt[t]*th[t]^2
-      + Qxd * sum {t in T} dt[t]*xd[t]^2
-      + Qyd * sum {t in T} dt[t]*yd[t]^2
-      + Qthd * sum {t in T} dt[t]*thd[t]^2
-      + QTR * sum {t in T} dt[t]*TR[t]^2
-      + QLB * sum {t in T} dt[t]*LB[t]^2
-      + Qm * sum {t in T} dt[t]*m[t]^2;
+        Qx * sum {t in T} x[t]^2
+      + Qy * sum {t in T} y[t]^2
+      + Qth * sum {t in T} th[t]^2
+      + Qxd * sum {t in T} xd[t]^2
+      + Qyd * sum {t in T} yd[t]^2
+      + Qthd * sum {t in T} thd[t]^2
+      + QTR * sum {t in T} TR[t]^2
+      + QLB * sum {t in T} LB[t]^2
+      + Qm * sum {t in T} m[t]^2;
 
     # Constraints
     subject to thrust_constraint {t in T}:
@@ -254,13 +254,13 @@ ampl.eval('''
     subject to ypos_model_constraint {t in 1..N-1}:
         y[t + 1] = TR[t]*(y[t] + dt[t]*(yd[t]) + dt[t]*(cos(th[t]+phi[t])*tfa[t]/m[t] - 9.8 + d*yd[t]^2/m[t])/2);
     subject to th_model_constraint {t in 1..N-1}:
-        th[t + 1] = TR[t]*(th[t] + dt[t]*(thd[t]) + dt[t]*2*tfa[t]*sin(phi[t])/(L*m[t]));
+        th[t + 1] = TR[t]*(th[t] + dt[t]*(thd[t]) - dt[t]*2*tfa[t]*sin(phi[t])/(L*m[t]));
     subject to xvel_model_constraint {t in 1..N-1}:
         xd[t + 1] = TR[t]*(xd[t] - dt[t]*sin(th[t]+phi[t])*tfa[t]/m[t]);
     subject to yvel_model_constraint {t in 1..N-1}:
         yd[t + 1] = TR[t]*(yd[t] + dt[t]*(cos(th[t]+phi[t])*tfa[t]/m[t] - 9.8 + d*yd[t]^2/m[t]));
     subject to rate_model_constraint {t in 1..N-1}:
-        thd[t + 1] = TR[t]*(thd[t] + dt[t]*4*tfa[t]*sin(phi[t])/(L*m[t]));
+        thd[t + 1] = TR[t]*(thd[t] - dt[t]*4*tfa[t]*sin(phi[t])/(L*m[t]));
     subject to initial_x_constraint:
         x[1] = x0;
     subject to initial_y_constraint:
@@ -305,26 +305,19 @@ ampl.getParameter("Qm").set(Qm)
 ampl.getParameter("QTR").set(QTR)
 ampl.getParameter("QLB").set(QLB)
 ampl.getParameter("Rtfa").set(Rtfa)
-ampl.getParameter("pos").set(pos)
-ampl.getParameter("angle").set(angle)
-ampl.getParameter("vel").set(vel)
-ampl.getParameter("rate").set(rate)
 
 dt_values = [dt0 * math.exp(dt_decay*i) for i in range(N)]
 ampl.getParameter("dt").setValues({i+1: dt_values[i] for i in range(N)})
 
-# Set the solver to COUENNE
 ampl.setOption('solver', 'bonmin')
-
-# Display the results
-prob = ProblemState()
+ampl.setOption('presolve_eps', 1.5e-07)
 
 
 def catch():
     probs = [ProblemState()]
     fig, ax = plt.subplots()
     writer = FFMpegWriter(fps=1/dt0)
-    with writer.saving(fig, "ship.mp4", dpi=200):
+    with writer.saving(fig, "ship.mov", dpi=200):
         while True:
             probs[-1].solve(ampl)
             print(probs[-1])
@@ -337,6 +330,8 @@ def catch():
                 print("rip")
                 break
             probs.append(ProblemState(probs[-1]))
+    for prob in probs:
+        prob.print_action()
 
 
 catch()
