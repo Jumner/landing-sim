@@ -1,18 +1,23 @@
 from amplpy import AMPL
+from matplotlib import pyplot as plt
 import math
 # Initialize AMPL instance
 ampl = AMPL()
 
 # Params
-N = 5
+N = 1
+N = 2
+N = 7
+N = 9
+# N = 20
 mi = 250000  # initial mass
 md = 150000
-tf_min = 0.2*3*2.26*10**6  # min thrust (newton)
+tf_min = 0.4*3*2.26*10**6  # min thrust (newton)
 tf_max = 1.0*3*2.26*10**6  # max thrust (newton)
 phi_max = math.radians(15)  # max thrust gimbal angle
 th_max = math.radians(120)  # max thrust gimbal angle
 L = 50.3  # length of body
-M = 10**15  # big number go brrr
+M = 10**9  # big number go brrr
 c = 1 / (3700)  # mass flow rate per newton
 d = 110  # drag coefficient
 # catch bounds
@@ -23,17 +28,17 @@ rate = math.radians(10)
 # Tuning variables
 Qx = 1
 Qy = 1
-Qth = 1000
+Qth = 1000**2
 Qxd = 1
 Qyd = 1
-Qthd = 100
-Rtfa = 0.0002
-Qm = -0.006
-QTR = 1500
-QLB = 1500
+Qthd = 100**2
+Rtfa = 0.1*0.0002**2
+Qm = -0.006**2
+QTR = 1500**2
+QLB = 1500**2
 # Initial conditions
-x0 = 200
-y0 = 1500
+x0 = 0
+y0 = 800
 xd0 = 0
 yd0 = -150
 th0 = 0 # math.radians(90) TODO
@@ -80,11 +85,12 @@ ampl.eval('''
     # Decision variables
     var LB {T} binary;
     var TR {T} binary;
-    var x {T} >= 0;
-    var y {T} >= 0;
+    var x {T};
+    var y {T};
     var th {T} >= -th_max, <= th_max;
     var xd {T};
-    var yd {T} <= 0;
+    var yd {T};
+    var ydc {T};
     var thd {T};
     var tf {T} >= tf_min, <= tf_max;
     var phi {T} >= -phi_max, <= phi_max;
@@ -94,21 +100,27 @@ ampl.eval('''
 ampl.eval('''
     # Objective function
     minimize obj:
-        Qx * sum {t in T} x[t]^2
-      + Qy * sum {t in T} y[t]^2
-      + Qth * sum {t in T} th[t]^2
-      + Qxd * sum {t in T} xd[t]^2
-      + Qyd * sum {t in T} yd[t]^2
-      + Qthd * sum {t in T} thd[t]^2
-      + Qm * sum {t in T} m[t]^2
-      + QTR * sum {t in T} TR[t]^2
-      + QLB * sum {t in T} LB[t]^2
-      + Rtfa * sum {t in T} tfa[t]^2;
+        Qx * sum {t in T} dt[t]*x[t]^2
+      + Qy * sum {t in T} dt[t]*y[t]^2
+      + Qth * sum {t in T} dt[t]*th[t]^2
+      + Qxd * sum {t in T} dt[t]*xd[t]^2
+      + Qyd * sum {t in T} dt[t]*yd[t]^2
+      + Qthd * sum {t in T} dt[t]*thd[t]^2
+      # + Qm * sum {t in T} dt[t]*m[t]^2
+      + QTR * sum {t in T} dt[t]*TR[t]^2
+      # + QLB * sum {t in T} dt[t]*LB[t]^2
+      + Rtfa * sum {t in T} dt[t]*LB[t]*tfa[t]^2;
 ''')
 ampl.eval('''
     # Constraints
-    # subject to thrust_constraint {t in T}:
-    #     tfa[t] = tf[t] * LB[t] * TR[t];
+    subject to thrust_constraint {t in T}:
+        tfa[t] = tf[t] * LB[t] * TR[t];
+    # subject to thrust_lb_constraint {t in T}:
+    #     tfa[t] <= M * LB[t];
+    # subject to thrust_tr_constraint {t in T}:
+    #     tfa[t] <= M * TR[t];
+    subject to position_catch_constraint {t in T}:
+        x[t]^2 + y[t]^2 + th[t]^2 + xd[t]^2 + yd[t]^2 + thd[t]^2 <= 1 + M * TR[t];
     # subject to position_catch_constraint {t in T}:
     #     x[t]^2 + y[t]^2 <= pos^2 + M * TR[t];
     # subject to angle_catch_constraint {t in T}:
@@ -117,24 +129,28 @@ ampl.eval('''
     #     xd[t]^2 + yd[t]^2 <= vel^2 + M * TR[t];
     # subject to rate_catch_constraint {t in T}:
     #     thd[t]^2 <= rate^2 + M * TR[t];
-    # subject to landing_shutoff_constraint {t in 1..N-1}:
-    #     LB[t + 1] >= LB[t];
+    subject to landing_shutoff_constraint {t in 1..N-1}:
+        LB[t + 1] >= LB[t];
     # subject to caught_constraint {t in 1..N-1}:
     #     TR[t + 1] <= TR[t];
-    # subject to mass_model_constraint {t in 1..N-1}:
-    #     m[t + 1] = m[t] - c*dt[t]*tfa[t];
+    subject to mass_model_constraint {t in 1..N-1}:
+        m[t + 1] = m[t];# - c*dt[t]*tfa[t];
     subject to xpos_model_constraint {t in 1..N-1}:
         x[t + 1] = TR[t]*(x[t] + dt[t]*xd[t]);
     subject to ypos_model_constraint {t in 1..N-1}:
         y[t + 1] = TR[t]*(y[t] + dt[t]*yd[t]);
     subject to th_model_constraint {t in 1..N-1}:
         th[t + 1] = TR[t]*(th[t] + dt[t]*thd[t]);
-    # subject to xvel_model_constraint {t in 1..N-1}:
-    #     xd[t + 1] = TR[t]*(xd[t] + dt[t]*sin(th[t]+phi[t])*tfa[t]/m[t]);
+    subject to xvel_model_constraint {t in 1..N-1}:
+        xd[t + 1] = TR[t]*(xd[t] + dt[t]*sin(th[t]+phi[t])*tfa[t]/m[t]);
     # subject to yvel_model_constraint {t in 1..N-1}:
-    #     yd[t + 1] = TR[t]*(yd[t] + dt[t]*(cos(th[t]+phi[t])*tfa[t]/m[t] - 9.8 - d*y[t]^2/m[t]));
-    # subject to rate_model_constraint {t in 1..N-1}:
-    #     thd[t + 1] = TR[t]*(thd[t] + dt[t]*4*tfa[t]*sin(phi[t])/(L*m[t]));
+    #     yd[t + 1] = TR[t]*(yd[t] + dt[t]*(cos(th[t]+phi[t])*tfa[t]/m[t] - 9.8 - d*yd[t]^2/m[t]));
+    subject to vd_clone_constraint {t in 1..N}:
+        ydc[t] >= yd[t];
+    subject to yvel_model_constraint {t in 1..N-1}:
+        yd[t + 1] = TR[t]*(yd[t] + dt[t]*(cos(th[t]+phi[t])*tfa[t]/m[t] - 9.8 + d*yd[t]^2/m[t]));
+    subject to rate_model_constraint {t in 1..N-1}:
+        thd[t + 1] = TR[t]*(thd[t] + dt[t]*4*tfa[t]*sin(phi[t])/(L*m[t]));
     subject to initial_x_constraint:
         x[1] = x0;
     subject to initial_y_constraint:
@@ -149,12 +165,10 @@ ampl.eval('''
         thd[1] = thd0;
     subject to initial_mass_constraint:
         m[1] = mi;
-    # subject to initial_tr_constraint:
-    #     TR[1] = 1;
-    subject to initial_tr_constraint {t in 1..N}:
-        TR[t] = 1;
-    subject to initial_lb_constraint:
-        LB[1] = 1;
+    subject to initial_tr_constraint:
+        TR[1] = 1;
+    # subject to initial_tr_constraint {t in 1..N}:
+    #     TR[t] = 1;
 ''')
 # Set params
 ampl.getParameter("mi").set(mi)
@@ -189,46 +203,61 @@ ampl.getParameter("xd0").set(xd0)
 ampl.getParameter("yd0").set(yd0)
 ampl.getParameter("thd0").set(thd0)
 
-dt_values = [0.1 * math.exp(i / 5) for i in range(N)]
+dt_values = [0.1 * math.exp(0.7*i) for i in range(N)]
 ampl.getParameter("dt").setValues({i+1: dt_values[i] for i in range(N)})
 
 # Set the solver to COUENNE
-ampl.setOption('solver', 'couenne')
-
-# Set initial conditions
-ampl.getVariable('x').setValues({i+1: x0 for i in range(N)})
-ampl.getVariable('y').setValues({i+1: y0 for i in range(N)})
-ampl.getVariable('th').setValues({i+1: th0 for i in range(N)})
-ampl.getVariable('xd').setValues({i+1: xd0 for i in range(N)})
-ampl.getVariable('yd').setValues({i+1: yd0 for i in range(N)})
-ampl.getVariable('thd').setValues({i+1: thd0 for i in range(N)})
-ampl.getVariable('TR').setValues({i+1: 1 for i in range(N)})
+ampl.setOption('solver', 'bonmin')
 
 # Solve the problem
 ampl.solve()
 
 # Display the results
 x = ampl.getVariable('x').getValues().toList()
+x = ampl.getVariable('x').getValues().toList()
+y = ampl.getVariable('y').getValues().toList()
 y = ampl.getVariable('y').getValues().toList()
 th = ampl.getVariable('th').getValues().toList()
+th = ampl.getVariable('th').getValues().toList()
+xd = ampl.getVariable('xd').getValues().toList()
 xd = ampl.getVariable('xd').getValues().toList()
 yd = ampl.getVariable('yd').getValues().toList()
+yd = ampl.getVariable('yd').getValues().toList()
+thd = ampl.getVariable('thd').getValues().toList()
 thd = ampl.getVariable('thd').getValues().toList()
 TR = ampl.getVariable('TR').getValues().toList()
-LB = ampl.getVariable('TR').getValues().toList()
+TR = ampl.getVariable('TR').getValues().toList()
+LB = ampl.getVariable('LB').getValues().toList()
+LB = ampl.getVariable('LB').getValues().toList()
+tf = ampl.getVariable('tf').getValues().toList()
 tf = ampl.getVariable('tf').getValues().toList()
 phi = ampl.getVariable('phi').getValues().toList()
+phi = ampl.getVariable('phi').getValues().toList()
 m = ampl.getVariable('m').getValues().toList()
+m = ampl.getVariable('m').getValues().toList()
+tfa = ampl.getVariable('tfa').getValues().toList()
 tfa = ampl.getVariable('tfa').getValues().toList()
 
 
 def display():
+    time = 0
     for i in range(N):
-        print(f"Timestep: {i+1}:")
+        print(f"Timestep: {i+1}: t={time}")
         print(f"\tx, y, th: {x[i][1]}, {y[i][1]}, {th[i][1]}")
         print(f"\txd, yd, thd: {xd[i][1]}, {yd[i][1]}, {thd[i][1]}")
         print(f"\tTR, LB, m: {TR[i][1]}, {LB[i][1]}, {m[i][1]}")
-        print(f"\ttf, fta, phi: {tf[i][1]}, {tfa[i][1]}, {phi[i][1]}")
+        print(f"\ttf, tfa, phi: {tf[i][1]}, {tfa[i][1]}, {phi [i][1]}")
+        print("")
+        time += dt_values[i]
+    print("Done")
+
+
+def plot():
+    xp = list(map(lambda ans: ans[1], x))
+    yp = list(map(lambda ans: ans[1], y))
+    plt.plot(xp, yp)
+    plt.show()
 
 
 display()
+plot()
