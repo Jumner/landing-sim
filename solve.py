@@ -2,15 +2,17 @@ from amplpy import AMPL
 import xarray as xr
 from matplotlib import pyplot as plt
 from matplotlib.animation import FFMpegWriter
+from matplotlib.patches import Rectangle
 import math
 # Initialize AMPL instance
 ampl = AMPL()
 
 # Params
 N = 10
+# N = 3
 md = 150000
-tf_min = 0.4*3*2.26*10**6  # min thrust (newton)
-tf_max = 1.0*3*2.26*10**6  # max thrust (newton)
+tf_min = 0.4*2*2.26*10**6  # min thrust (newton)
+tf_max = 1.0*2*2.26*10**6  # max thrust (newton)
 phi_max = math.radians(15)  # max thrust gimbal angle
 th_max = math.radians(120)  # max thrust gimbal angle
 L = 50.3  # length of body
@@ -23,19 +25,19 @@ angle = math.radians(10)
 vel = 0.5
 rate = math.radians(10)
 # Tuning variables
-Qx = 1
+Qx = 5
 Qy = 1
 Qth = 1000**2
-Qxd = 1
+Qxd = 10
 Qyd = 1
 Qthd = 100**2
 Rtfa = 0.5*0.0002**2
 Qm = -0.006**2
-QTR = 100*1500**2
-QLB = 1500**2
+QTR = 1000*1500**2
+QLB = 10*1500**2
 # Rate decay const
-dt0 = 0.1
-dt_decay = 0.6
+dt0 = 3
+dt_decay = 0.0
 
 
 class ProblemState:
@@ -55,8 +57,8 @@ class ProblemState:
         # Initial conditions
         if problem_state is None:
             self.t0 = 0
-            self.x0 = 1000
-            self.y0 = 2000
+            self.x0 = 500
+            self.y0 = 3000
             self.th0 = math.radians(90)
             self.xd0 = 0
             self.yd0 = -200
@@ -149,12 +151,23 @@ class ProblemState:
     def plot(self, ax):
         ax.clear()
         ax.set_xlim(-1500, 1500)
-        ax.set_ylim(-100, 4000)
+        ax.set_ylim(-500, 4000)
         da = xr.DataArray(self.y, dims=('x',), coords={'x': self.x, 'LB': ('x', self.LB), 'TR': ('x', self.TR)})
-        da.plot(ax=ax, color='blue', linewidth=3)
-        da.where(da.LB == 1).plot(ax=ax, color='red', linewidth=3)
-        da.where(da.TR == 0).plot(ax=ax, color='green', linewidth=3)
+        da.plot(ax=ax, color='blue', linewidth=3, zorder=0)
+        da.where(da.LB == 1).plot(ax=ax, color='red', linewidth=3, zorder=10)
+        da.where(da.TR == 0).plot(ax=ax, color='green', linewidth=3, zorder=20)
         ax.set_aspect('equal')
+        plt.gca().add_patch(Rectangle((self.x[0] - 9*5/2, self.y[0] - L*5/2), 5*9, 5*L,
+                                      angle=math.degrees(self.th[0]),
+                                      facecolor='grey',
+                                      rotation_point=(self.x[0], self.y[0]),
+                                      zorder=30))
+        if self.LB[0] > 0.5:
+            plt.gca().add_patch(Rectangle((self.x[0] + 5*L*math.sin(self.th[0])/2 - 20/2, self.y[0] - 5*L*math.cos(self.th[0])/2 - 3*L), 20, 3*L,
+                                          angle=math.degrees(self.th[0] + self.phi[0]),
+                                          facecolor='red',
+                                          rotation_point=(self.x[0] + 5*L*math.sin(self.th[0])/2, self.y[0] - 5*L*math.cos(self.th[0])/2),
+                                          zorder=40))
 
     def is_caught(self):
         return self.TR0 < 0.5
@@ -237,11 +250,11 @@ ampl.eval('''
     subject to mass_model_constraint {t in 1..N-1}:
         m[t + 1] = m[t] - c*dt[t]*tfa[t];
     subject to xpos_model_constraint {t in 1..N-1}:
-        x[t + 1] = TR[t]*(x[t] + dt[t]*xd[t]);
+        x[t + 1] = TR[t]*(x[t] + dt[t]*(xd[t] - dt[t]*sin(th[t]+phi[t])*tfa[t]/m[t])/2);
     subject to ypos_model_constraint {t in 1..N-1}:
-        y[t + 1] = TR[t]*(y[t] + dt[t]*yd[t]);
+        y[t + 1] = TR[t]*(y[t] + dt[t]*(yd[t]) + dt[t]*(cos(th[t]+phi[t])*tfa[t]/m[t] - 9.8 + d*yd[t]^2/m[t])/2);
     subject to th_model_constraint {t in 1..N-1}:
-        th[t + 1] = TR[t]*(th[t] + dt[t]*thd[t]);
+        th[t + 1] = TR[t]*(th[t] + dt[t]*(thd[t]) + dt[t]*2*tfa[t]*sin(phi[t])/(L*m[t]));
     subject to xvel_model_constraint {t in 1..N-1}:
         xd[t + 1] = TR[t]*(xd[t] - dt[t]*sin(th[t]+phi[t])*tfa[t]/m[t]);
     subject to yvel_model_constraint {t in 1..N-1}:
@@ -310,7 +323,7 @@ prob = ProblemState()
 def catch():
     probs = [ProblemState()]
     fig, ax = plt.subplots()
-    writer = FFMpegWriter(fps=10)
+    writer = FFMpegWriter(fps=1/dt0)
     with writer.saving(fig, "ship.mp4", dpi=200):
         while True:
             probs[-1].solve(ampl)
@@ -319,6 +332,9 @@ def catch():
             writer.grab_frame()
             if probs[-1].is_caught():
                 print("CAUGHT")
+                break
+            if probs[-1].y[0] < -10 or probs[-1].yd[0] > 10:
+                print("rip")
                 break
             probs.append(ProblemState(probs[-1]))
 
