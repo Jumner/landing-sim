@@ -5,14 +5,125 @@ import math
 # Initialize AMPL instance
 ampl = AMPL()
 
+
+class ProblemState:
+    def __init__(self, problem_state=None):
+        self.LB = []
+        self.TR = []
+        self.x = []
+        self.y = []
+        self.th = []
+        self.xd = []
+        self.yd = []
+        self.thd = []
+        self.tf = []
+        self.phi = []
+        self.m = []
+        self.tfa = []
+        # Initial conditions
+        if problem_state is None:
+            self.x0 = 850
+            self.y0 = 2000
+            self.th0 = math.radians(90)
+            self.xd0 = 0
+            self.yd0 = -200
+            self.thd0 = 0
+            self.m0 = 250000
+            self.TR0 = 1
+            self.LB0 = 0
+            self.phi0 = 0
+            self.tf0 = tf_max
+        else:
+            self.x0 = problem_state.x[1]
+            self.y0 = problem_state.y[1]
+            self.th0 = problem_state.th[1]
+            self.xd0 = problem_state.xd[1]
+            self.yd0 = problem_state.yd[1]
+            self.thd0 = problem_state.thd[1]
+            self.m0 = problem_state.m[1]
+            self.TR0 = problem_state.TR[1]
+            self.LB0 = problem_state.LB[1]
+            self.phi0 = problem_state.phi[1]
+            self.tf0 = problem_state.tf[1]
+
+    def solve(self, ampl):
+        # Set initial conditions
+        ampl.getParameter("x0").set(self.x0)
+        ampl.getParameter("y0").set(self.y0)
+        ampl.getParameter("th0").set(self.th0)
+        ampl.getParameter("xd0").set(self.xd0)
+        ampl.getParameter("yd0").set(self.yd0)
+        ampl.getParameter("thd0").set(self.thd0)
+        ampl.getParameter("phi0").set(self.phi0)
+        ampl.getParameter("tf0").set(self.tf0)
+        ampl.getParameter("m0").set(self.m0)
+        ampl.getParameter("TR0").set(self.TR0)
+        ampl.getParameter("LB0").set(self.LB0)
+
+        # Solve the problem
+        ampl.solve()
+        x = ampl.getVariable('x').getValues().toList()
+        x = ampl.getVariable('x').getValues().toList()
+        y = ampl.getVariable('y').getValues().toList()
+        y = ampl.getVariable('y').getValues().toList()
+        th = ampl.getVariable('th').getValues().toList()
+        th = ampl.getVariable('th').getValues().toList()
+        xd = ampl.getVariable('xd').getValues().toList()
+        xd = ampl.getVariable('xd').getValues().toList()
+        yd = ampl.getVariable('yd').getValues().toList()
+        yd = ampl.getVariable('yd').getValues().toList()
+        thd = ampl.getVariable('thd').getValues().toList()
+        thd = ampl.getVariable('thd').getValues().toList()
+        TR = ampl.getVariable('TR').getValues().toList()
+        TR = ampl.getVariable('TR').getValues().toList()
+        LB = ampl.getVariable('LB').getValues().toList()
+        LB = ampl.getVariable('LB').getValues().toList()
+        tf = ampl.getVariable('tf').getValues().toList()
+        tf = ampl.getVariable('tf').getValues().toList()
+        phi = ampl.getVariable('phi').getValues().toList()
+        phi = ampl.getVariable('phi').getValues().toList()
+        m = ampl.getVariable('m').getValues().toList()
+        m = ampl.getVariable('m').getValues().toList()
+        tfa = ampl.getVariable('tfa').getValues().toList()
+        tfa = ampl.getVariable('tfa').getValues().toList()
+        self.x = [val[1] for val in x]
+        self.y = [val[1] for val in y]
+        self.th = [val[1] for val in th]
+        self.xd = [val[1] for val in xd]
+        self.yd = [val[1] for val in yd]
+        self.thd = [val[1] for val in thd]
+        self.TR = [val[1] for val in TR]
+        self.LB = [val[1] for val in LB]
+        self.tf = [val[1] for val in tf]
+        self.phi = [val[1] for val in phi]
+        self.m = [val[1] for val in m]
+        self.tfa = [val[1] for val in tfa]
+
+    def __str__(self):
+        string = []
+        time = 0
+        for i in range(N):
+            string.append(f"Timestep: {i+1}: t={time}\n")
+            string.append(f"\tx, y, th: {self.x[i]}, {self.y[i]}, {self.th[i]}\n")
+            string.append(f"\txd, yd, thd: {self.xd[i]}, {self.yd[i]}, {self.thd[i]}\n")
+            string.append(f"\tTR, LB, m: {self.TR[i]}, {self.LB[i]}, {self.m[i]}\n")
+            string.append(f"\ttf, tfa, phi: {self.tf[i]}, {self.tfa[i]}, {self.phi [i]}\n\n")
+            time += dt_values[i]
+        string.append("Done\n")
+        return "".join(string)
+
+    def plot(self):
+        da = xr.DataArray(self.y, dims=('x',), coords={'x': self.x, 'LB': ('x', self.LB), 'TR': ('x', self.TR)})
+        fig, ax = plt.subplots()
+        da.plot(ax=ax, color='blue', linewidth=3)
+        da.where(da.LB == 1).plot(ax=ax, color='red', linewidth=3)
+        da.where(da.TR == 0).plot(ax=ax, color='green', linewidth=3)
+        ax.set_aspect('equal')
+        plt.show()
+
+
 # Params
-N = 1
-N = 2
-N = 5
-N = 8
-N = 9
 N = 10
-mi = 250000  # initial mass
 md = 150000
 tf_min = 0.4*3*2.26*10**6  # min thrust (newton)
 tf_max = 1.0*3*2.26*10**6  # max thrust (newton)
@@ -38,19 +149,14 @@ Rtfa = 0.5*0.0002**2
 Qm = -0.006**2
 QTR = 10*1500**2
 QLB = 1500**2
-# Initial conditions
-x0 = 250
-y0 = 2000
-xd0 = 0
-yd0 = -200
-th0 = 0 # math.radians(90) TODO
-thd0 = 0
+# Rate decay const
+dt0 = 0.1
+dt_decay = 0.7
 
 # Define the optimization model directly in Python
 ampl.eval(f"set T := 1..{N};")
 ampl.eval('''
     # Params
-    param mi;
     param md;
     param tf_min;
     param tf_max;
@@ -82,8 +188,12 @@ ampl.eval('''
     param xd0;
     param yd0;
     param thd0;
-''')
-ampl.eval('''
+    param phi0;
+    param tf0;
+    param m0;
+    param TR0;
+    param LB0;
+
     # Decision variables
     var LB {T} binary;
     var TR {T} binary;
@@ -97,22 +207,18 @@ ampl.eval('''
     var phi {T} >= -phi_max, <= phi_max;
     var m {T} >= md;
     var tfa {T};
-''')
-ampl.eval('''
+
     # Objective function
     minimize obj:
         Qx * sum {t in T} dt[t]*x[t]^2
       + Qy * sum {t in T} dt[t]*y[t]^2
       + Qth * sum {t in T} dt[t]*th[t]^2
-      # + Qxd * sum {t in T} dt[t]*xd[t]^2
-      # + Qyd * sum {t in T} dt[t]*yd[t]^2
-      # + Qthd * sum {t in T} dt[t]*thd[t]^2
+      + Qxd * sum {t in T} dt[t]*xd[t]^2
+      + Qyd * sum {t in T} dt[t]*yd[t]^2
+      + Qthd * sum {t in T} dt[t]*thd[t]^2
       + QTR * sum {t in T} dt[t]*TR[t]^2
-      # - Rtfa * sum {t in T} dt[t]*tfa[t]^2
-      # + QLB * sum {t in T} dt[t]*LB[t]^2
       + Qm * sum {t in T} dt[t]*m[t]^2;
-''')
-ampl.eval('''
+
     # Constraints
     subject to thrust_constraint {t in T}:
         tfa[t] = tf[t] * LB[t] * TR[t];
@@ -129,7 +235,7 @@ ampl.eval('''
     subject to th_model_constraint {t in 1..N-1}:
         th[t + 1] = TR[t]*(th[t] + dt[t]*thd[t]);
     subject to xvel_model_constraint {t in 1..N-1}:
-        xd[t + 1] = TR[t]*(xd[t] + dt[t]*sin(th[t]+phi[t])*tfa[t]/m[t]);
+        xd[t + 1] = TR[t]*(xd[t] - dt[t]*sin(th[t]+phi[t])*tfa[t]/m[t]);
     subject to yvel_model_constraint {t in 1..N-1}:
         yd[t + 1] = TR[t]*(yd[t] + dt[t]*(cos(th[t]+phi[t])*tfa[t]/m[t] - 9.8 + d*yd[t]^2/m[t]));
     subject to rate_model_constraint {t in 1..N-1}:
@@ -146,15 +252,18 @@ ampl.eval('''
         yd[1] = yd0;
     subject to initial_thd_constraint:
         thd[1] = thd0;
+    subject to initial_phi_constraint:
+        phi[1] = phi0;
+    subject to initial_tf_constraint:
+        tf[1] = tf0;
     subject to initial_mass_constraint:
-        m[1] = mi;
+        m[1] = m0;
     subject to initial_tr_constraint:
-        TR[1] = 1;
-    # subject to initial_tr_constraint {t in 1..N}:
-    #     TR[t] = 1;
+        TR[1] = TR0;
+    subject to initial_turn_constraint:
+        LB[1] = LB0;
 ''')
 # Set params
-ampl.getParameter("mi").set(mi)
 ampl.getParameter("md").set(md)
 ampl.getParameter("tf_min").set(tf_min)
 ampl.getParameter("tf_max").set(tf_max)
@@ -179,75 +288,15 @@ ampl.getParameter("pos").set(pos)
 ampl.getParameter("angle").set(angle)
 ampl.getParameter("vel").set(vel)
 ampl.getParameter("rate").set(rate)
-ampl.getParameter("x0").set(x0)
-ampl.getParameter("y0").set(y0)
-ampl.getParameter("th0").set(th0)
-ampl.getParameter("xd0").set(xd0)
-ampl.getParameter("yd0").set(yd0)
-ampl.getParameter("thd0").set(thd0)
 
-dt_values = [0.1 * math.exp(0.7*i) for i in range(N)]
+dt_values = [dt0 * math.exp(dt_decay*i) for i in range(N)]
 ampl.getParameter("dt").setValues({i+1: dt_values[i] for i in range(N)})
 
 # Set the solver to COUENNE
 ampl.setOption('solver', 'bonmin')
 
-# Solve the problem
-ampl.solve()
-
 # Display the results
-x = ampl.getVariable('x').getValues().toList()
-x = ampl.getVariable('x').getValues().toList()
-y = ampl.getVariable('y').getValues().toList()
-y = ampl.getVariable('y').getValues().toList()
-th = ampl.getVariable('th').getValues().toList()
-th = ampl.getVariable('th').getValues().toList()
-xd = ampl.getVariable('xd').getValues().toList()
-xd = ampl.getVariable('xd').getValues().toList()
-yd = ampl.getVariable('yd').getValues().toList()
-yd = ampl.getVariable('yd').getValues().toList()
-thd = ampl.getVariable('thd').getValues().toList()
-thd = ampl.getVariable('thd').getValues().toList()
-TR = ampl.getVariable('TR').getValues().toList()
-TR = ampl.getVariable('TR').getValues().toList()
-LB = ampl.getVariable('LB').getValues().toList()
-LB = ampl.getVariable('LB').getValues().toList()
-tf = ampl.getVariable('tf').getValues().toList()
-tf = ampl.getVariable('tf').getValues().toList()
-phi = ampl.getVariable('phi').getValues().toList()
-phi = ampl.getVariable('phi').getValues().toList()
-m = ampl.getVariable('m').getValues().toList()
-m = ampl.getVariable('m').getValues().toList()
-tfa = ampl.getVariable('tfa').getValues().toList()
-tfa = ampl.getVariable('tfa').getValues().toList()
-
-
-def display():
-    time = 0
-    for i in range(N):
-        print(f"Timestep: {i+1}: t={time}")
-        print(f"\tx, y, th: {x[i][1]}, {y[i][1]}, {th[i][1]}")
-        print(f"\txd, yd, thd: {xd[i][1]}, {yd[i][1]}, {thd[i][1]}")
-        print(f"\tTR, LB, m: {TR[i][1]}, {LB[i][1]}, {m[i][1]}")
-        print(f"\ttf, tfa, phi: {tf[i][1]}, {tfa[i][1]}, {phi [i][1]}")
-        print("")
-        time += dt_values[i]
-    print("Done")
-
-
-def plot():
-    xp = [val[1] for val in x]
-    yp = [val[1] for val in y]
-    LBp = [val[1] for val in LB]
-    TRp = [val[1] for val in TR]
-    da = xr.DataArray(yp, dims=('x',), coords={'x': xp, 'LB': ('x', LBp), 'TR': ('x', TRp)})
-    fig, ax = plt.subplots()
-    da.plot(ax=ax, color='blue', linewidth=3)
-    da.where(da.LB == 1).plot(ax=ax, color='red', linewidth=3)
-    da.where(da.TR == 0).plot(ax=ax, color='green', linewidth=3)
-    ax.set_aspect('equal')
-    plt.show()
-
-
-display()
-plot()
+prob = ProblemState()
+prob.solve(ampl)
+print(prob)
+prob.plot()
