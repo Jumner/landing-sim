@@ -1,9 +1,41 @@
 from amplpy import AMPL
 import xarray as xr
 from matplotlib import pyplot as plt
+from matplotlib.animation import FFMpegWriter
 import math
 # Initialize AMPL instance
 ampl = AMPL()
+
+# Params
+N = 10
+md = 150000
+tf_min = 0.4*3*2.26*10**6  # min thrust (newton)
+tf_max = 1.0*3*2.26*10**6  # max thrust (newton)
+phi_max = math.radians(15)  # max thrust gimbal angle
+th_max = math.radians(120)  # max thrust gimbal angle
+L = 50.3  # length of body
+M = 10**9  # big number go brrr
+c = 1 / (3700)  # mass flow rate per newton
+d = 200  # drag coefficient
+# catch bounds
+pos = 0.5
+angle = math.radians(10)
+vel = 0.5
+rate = math.radians(10)
+# Tuning variables
+Qx = 1
+Qy = 1
+Qth = 1000**2
+Qxd = 1
+Qyd = 1
+Qthd = 100**2
+Rtfa = 0.5*0.0002**2
+Qm = -0.006**2
+QTR = 100*1500**2
+QLB = 1500**2
+# Rate decay const
+dt0 = 0.1
+dt_decay = 0.6
 
 
 class ProblemState:
@@ -22,7 +54,8 @@ class ProblemState:
         self.tfa = []
         # Initial conditions
         if problem_state is None:
-            self.x0 = 850
+            self.t0 = 0
+            self.x0 = 1000
             self.y0 = 2000
             self.th0 = math.radians(90)
             self.xd0 = 0
@@ -34,6 +67,7 @@ class ProblemState:
             self.phi0 = 0
             self.tf0 = tf_max
         else:
+            self.t0 = problem_state.t0 + dt0
             self.x0 = problem_state.x[1]
             self.y0 = problem_state.y[1]
             self.th0 = problem_state.th[1]
@@ -101,7 +135,7 @@ class ProblemState:
 
     def __str__(self):
         string = []
-        time = 0
+        time = self.t0
         for i in range(N):
             string.append(f"Timestep: {i+1}: t={time}\n")
             string.append(f"\tx, y, th: {self.x[i]}, {self.y[i]}, {self.th[i]}\n")
@@ -112,46 +146,19 @@ class ProblemState:
         string.append("Done\n")
         return "".join(string)
 
-    def plot(self):
+    def plot(self, ax):
+        ax.clear()
+        ax.set_xlim(-1500, 1500)
+        ax.set_ylim(-100, 4000)
         da = xr.DataArray(self.y, dims=('x',), coords={'x': self.x, 'LB': ('x', self.LB), 'TR': ('x', self.TR)})
-        fig, ax = plt.subplots()
         da.plot(ax=ax, color='blue', linewidth=3)
         da.where(da.LB == 1).plot(ax=ax, color='red', linewidth=3)
         da.where(da.TR == 0).plot(ax=ax, color='green', linewidth=3)
         ax.set_aspect('equal')
-        plt.show()
 
+    def is_caught(self):
+        return self.TR0 < 0.5
 
-# Params
-N = 10
-md = 150000
-tf_min = 0.4*3*2.26*10**6  # min thrust (newton)
-tf_max = 1.0*3*2.26*10**6  # max thrust (newton)
-phi_max = math.radians(15)  # max thrust gimbal angle
-th_max = math.radians(120)  # max thrust gimbal angle
-L = 50.3  # length of body
-M = 10**9  # big number go brrr
-c = 1 / (3700)  # mass flow rate per newton
-d = 200  # drag coefficient
-# catch bounds
-pos = 0.5
-angle = math.radians(10)
-vel = 0.5
-rate = math.radians(10)
-# Tuning variables
-Qx = 1
-Qy = 1
-Qth = 1000**2
-Qxd = 1
-Qyd = 1
-Qthd = 100**2
-Rtfa = 0.5*0.0002**2
-Qm = -0.006**2
-QTR = 10*1500**2
-QLB = 1500**2
-# Rate decay const
-dt0 = 0.1
-dt_decay = 0.7
 
 # Define the optimization model directly in Python
 ampl.eval(f"set T := 1..{N};")
@@ -217,6 +224,7 @@ ampl.eval('''
       + Qyd * sum {t in T} dt[t]*yd[t]^2
       + Qthd * sum {t in T} dt[t]*thd[t]^2
       + QTR * sum {t in T} dt[t]*TR[t]^2
+      + QLB * sum {t in T} dt[t]*LB[t]^2
       + Qm * sum {t in T} dt[t]*m[t]^2;
 
     # Constraints
@@ -297,6 +305,22 @@ ampl.setOption('solver', 'bonmin')
 
 # Display the results
 prob = ProblemState()
-prob.solve(ampl)
-print(prob)
-prob.plot()
+
+
+def catch():
+    probs = [ProblemState()]
+    fig, ax = plt.subplots()
+    writer = FFMpegWriter(fps=10)
+    with writer.saving(fig, "ship.mp4", dpi=200):
+        while True:
+            probs[-1].solve(ampl)
+            print(probs[-1])
+            probs[-1].plot(ax)
+            writer.grab_frame()
+            if probs[-1].is_caught():
+                print("CAUGHT")
+                break
+            probs.append(ProblemState(probs[-1]))
+
+
+catch()
