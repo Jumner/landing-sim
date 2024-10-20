@@ -31,9 +31,10 @@ Qm = -0.006**2
 QTR = 1000*1500**2
 QLB = 10*1500**2
 # Rate decay const
-dt0 = 3
-# dt_decay = 0.05
-dt_decay = 0.0
+dt0 = 0.1
+dt_decay = 0.62
+# dt0 = 1
+# dt_decay = 0.28
 
 
 class ProblemState:
@@ -53,7 +54,7 @@ class ProblemState:
         # Initial conditions
         if problem_state is None:
             self.t0 = 0
-            self.x0 = 500
+            self.x0 = 350
             self.y0 = 3000
             self.th0 = math.radians(90)
             self.xd0 = 0
@@ -157,9 +158,9 @@ class ProblemState:
         ax.set_xlim(-1500, 1500)
         ax.set_ylim(-500, 4000)
         da = xr.DataArray(self.y, dims=('x',), coords={'x': self.x, 'LB': ('x', self.LB), 'TR': ('x', self.TR)})
-        da.plot(ax=ax, color='blue', linewidth=3, zorder=0)
-        da.where(da.LB == 1).plot(ax=ax, color='red', linewidth=3, zorder=10)
-        da.where(da.TR == 0).plot(ax=ax, color='green', linewidth=3, zorder=20)
+        da.plot(ax=ax, color='blue', linewidth=2, zorder=0)
+        da.where(da.LB == 1).plot(ax=ax, color='yellow', linewidth=2, zorder=10)
+        da.where(da.TR == 0).plot(ax=ax, color='green', linewidth=2, zorder=20)
         ax.set_aspect('equal')
         plt.gca().add_patch(Rectangle((self.x[0] - 9*5/2, self.y[0] - L*5/2), 5*9, 5*L,
                                       angle=math.degrees(self.th[0]),
@@ -167,7 +168,7 @@ class ProblemState:
                                       rotation_point=(self.x[0], self.y[0]),
                                       zorder=30))
         if self.LB[0] > 0.5:
-            plt.gca().add_patch(Rectangle((self.x[0] + 5*L*math.sin(self.th[0])/2 - 20/2, self.y[0] - 5*L*math.cos(self.th[0])/2 - 3*L), 20, 3*L,
+            plt.gca().add_patch(Rectangle((self.x[0] + 5*L*math.sin(self.th[0])/2 - 10*(self.tfa[0])/(tf_max), self.y[0] - 5*L*math.cos(self.th[0])/2 - 3*L), 20*(self.tfa[0])/(tf_max), 3*L,
                                           angle=math.degrees(self.th[0] + self.phi[0]),
                                           facecolor='red',
                                           rotation_point=(self.x[0] + 5*L*math.sin(self.th[0])/2, self.y[0] - 5*L*math.cos(self.th[0])/2),
@@ -261,6 +262,8 @@ ampl.eval('''
         yd[t + 1] = TR[t]*(yd[t] + dt[t]*(cos(th[t]+phi[t])*tfa[t]/m[t] - 9.8 + d*yd[t]^2/m[t]));
     subject to rate_model_constraint {t in 1..N-1}:
         thd[t + 1] = TR[t]*(thd[t] - dt[t]*4*tfa[t]*sin(phi[t])/(L*m[t]));
+    subject to yvel_increasing {t in 1..N-1}:
+        yd[t + 1] >= yd[t];
     subject to initial_x_constraint:
         x[1] = x0;
     subject to initial_y_constraint:
