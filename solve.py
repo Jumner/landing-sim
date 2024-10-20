@@ -226,23 +226,23 @@ ampl.eval('''
     var xd {T};
     var yd {T};
     var thd {T};
-    var tf {T} >= tf_min, <= tf_max;
-    var phi {T} >= -phi_max, <= phi_max;
     var m {T} >= md;
+    var tf {T} >= tf_min, <= tf_max;
     var tfa {T};
+    var phi {T} >= -phi_max, <= phi_max;
 
     # Objective function
     minimize obj:
-        Qx * sum {t in T} x[t]^2
-      + Qy * sum {t in T} y[t]^2
-      + Qth * sum {t in T} th[t]^2
-      + Qxd * sum {t in T} xd[t]^2
-      + Qyd * sum {t in T} yd[t]^2
-      + Qthd * sum {t in T} thd[t]^2
+      #   Qx * sum {t in T} x[t]^2
+      # + Qy * sum {t in T} y[t]^2
+      # + Qth * sum {t in T} th[t]^2
+      # + Qxd * sum {t in T} xd[t]^2
+      # + Qyd * sum {t in T} yd[t]^2
+      # + Qthd * sum {t in T} thd[t]^2
       + QTR * sum {t in T} TR[t]
       + QLB * sum {t in T} LB[t]
       - Rtfa * sum {t in T} tf[t]^2;
-      # + Qm * sum {t in T} m[t]^2;
+      - Qm * sum {t in T} m[t]^2;
 
     # Constraints
     subject to thrust_constraint {t in T}:
