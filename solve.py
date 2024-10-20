@@ -9,7 +9,7 @@ ampl = AMPL()
 
 # Params
 N = 10
-# N = 3
+# N = 5
 md = 150000
 tf_min = 0.4*2*2.26*10**6  # min thrust (newton)
 tf_max = 1.0*2*2.26*10**6  # max thrust (newton)
@@ -26,15 +26,17 @@ Qth = 1000**2
 Qxd = 10
 Qyd = 1
 Qthd = 100**2
-Rtfa = 0.5*0.0002**2
+Rtfa = 5*0.0002**2
 Qm = -0.006**2
-QTR = 1000*1500**2
-QLB = 10*1500**2
+QTR = 10000*1500**2
+QLB = 1000*1500**2
 # Rate decay const
-dt0 = 0.1
-dt_decay = 0.62
-# dt0 = 1
-# dt_decay = 0.28
+# dt0 = 0.1
+# dt0 = 3
+# dt_decay = 0.62
+# dt_decay = 1.5
+dt0 = 3
+dt_decay = 0
 
 
 class ProblemState:
@@ -237,25 +239,28 @@ ampl.eval('''
       + Qxd * sum {t in T} xd[t]^2
       + Qyd * sum {t in T} yd[t]^2
       + Qthd * sum {t in T} thd[t]^2
-      + QTR * sum {t in T} TR[t]^2
-      + QLB * sum {t in T} LB[t]^2
-      + Qm * sum {t in T} m[t]^2;
+      + QTR * sum {t in T} TR[t]
+      + QLB * sum {t in T} LB[t]
+      - Rtfa * sum {t in T} tf[t]^2;
+      # + Qm * sum {t in T} m[t]^2;
 
     # Constraints
     subject to thrust_constraint {t in T}:
         tfa[t] = tf[t] * LB[t] * TR[t];
-    subject to position_catch_constraint {t in T}:
+    subject to catch_constraint {t in 2..N}:
         x[t]^2 + y[t]^2 + th[t]^2 + xd[t]^2 + yd[t]^2 + thd[t]^2 <= 1 + M * TR[t];
+    subject to final_catch_constraint:
+        x[1]^2 + y[1]^2 + th[1]^2 + xd[1]^2 + yd[1]^2 + thd[1]^2 <= 2 + M * TR[1];
     subject to landing_shutoff_constraint {t in 1..N-1}:
         LB[t + 1] >= LB[t];
     subject to mass_model_constraint {t in 1..N-1}:
         m[t + 1] = m[t] - c*dt[t]*tfa[t];
     subject to xpos_model_constraint {t in 1..N-1}:
-        x[t + 1] = TR[t]*(x[t] + dt[t]*(xd[t] - dt[t]*sin(th[t]+phi[t])*tfa[t]/m[t])/2);
+        x[t + 1] = TR[t]*(x[t] + dt[t]*(xd[t]+xd[t+1])/2);
     subject to ypos_model_constraint {t in 1..N-1}:
-        y[t + 1] = TR[t]*(y[t] + dt[t]*(yd[t]) + dt[t]*(cos(th[t]+phi[t])*tfa[t]/m[t] - 9.8 + d*yd[t]^2/m[t])/2);
+        y[t + 1] = TR[t]*(y[t] + dt[t]*(yd[t]+yd[t+1])/2);
     subject to th_model_constraint {t in 1..N-1}:
-        th[t + 1] = TR[t]*(th[t] + dt[t]*(thd[t]) - dt[t]*2*tfa[t]*sin(phi[t])/(L*m[t]));
+        th[t + 1] = TR[t]*(th[t] + dt[t]*(thd[t]+thd[t+1])/2);
     subject to xvel_model_constraint {t in 1..N-1}:
         xd[t + 1] = TR[t]*(xd[t] - dt[t]*sin(th[t]+phi[t])*tfa[t]/m[t]);
     subject to yvel_model_constraint {t in 1..N-1}:
@@ -313,7 +318,7 @@ dt_values = [dt0 * math.exp(dt_decay*i) for i in range(N)]
 ampl.getParameter("dt").setValues({i+1: dt_values[i] for i in range(N)})
 
 ampl.setOption('solver', 'bonmin')
-ampl.setOption('presolve_eps', 1.5e-07)
+ampl.setOption('presolve_eps', 1e-05)
 
 
 def catch():

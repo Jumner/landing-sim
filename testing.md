@@ -24,4 +24,4 @@ I imposed the y[t+1] >= y[t] constraint to prevent it from compromising. It trip
 39.25s -> 1h56m3s201ms (caught)
 # 0.1s Caught
 $0.1e^{0.62x}$
- ->
+??? -> going to take like 6 hours lol no thanks! 4Hz is pretty cool
