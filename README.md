@@ -1,5 +1,8 @@
 # Landing Sim
 Inspired by the superheavy catch on October 13th, 2024, I had some spare time and wanted to try and develop a model predictive controller (MPC) that is capable or replicating a booster or ship catch.<br />
+<p align="center">
+<img src="0.25s-caught.gif" alt="gif of simulated catch" style="height:500px;"/>
+</p>
 ## How intelligent?
 "Replicate a booster or ship catch" is a pretty broad goal, so let me outline what it's capable of, and where it falls short.<br />
 ### What it does:
